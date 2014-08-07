@@ -10,6 +10,21 @@ Note that in modbus terminology, _client_ refers to the __master__ application o
 
 This code was originally forked from [lubia/modbus](https://github.com/lubia/modbus) and repositioned as a pure client (master) library for use by controller applications.
 
+### Installation and Usage
+
+Install the package in your environment with these commands (the RTU code now depends on [goserial](https://github.com/tarm/goserial)):
+
+```sh
+go get github.com/tarm/goserial
+go get github.com/dpapathanasiou/go-mobdbus
+```
+
+Next, build and run the examples:
+
+ * [rtu-client.go](examples/rtu-client.go) for an RTU example
+ * [tcp-client.og](examples/tcp-client.go) for a TCP/IP example
+
+
 ### Enabling the USB Serial Port adapter (RS-232) for RTU Access
 
 Slave devices which have [USB](http://en.wikipedia.org/wiki/Usb) ports for RTU access will not work immediately upon hot-plugging into a master computer.

@@ -22,7 +22,7 @@ go get github.com/dpapathanasiou/go-mobdbus
 Next, build and run the examples:
 
  * [rtu-client.go](examples/rtu-client.go) for an RTU example
- * [tcp-client.og](examples/tcp-client.go) for a TCP/IP example
+ * [tcp-client.go](examples/tcp-client.go) for a TCP/IP example
 
 
 ### Enabling the USB Serial Port adapter (RS-232) for RTU Access

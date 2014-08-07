@@ -7,9 +7,8 @@ package modbusclient
 
 import (
 	"fmt"
+	"github.com/tarm/goserial"
 	"log"
-	"os"
-	"syscall"
 	"time"
 )
 
@@ -63,68 +62,12 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 	return packet[:bytesUsed]
 }
 
-// TransmitAndReceive is a method corresponding to an RTUFrame object
-// which generates the corresponding ADU, transmits it to the modbus server
-// (slave device) specified by the given file pointer (serial port), and
-// returns a byte array of th e slave device's reply, and error (if any)
-func (frame *RTUFrame) TransmitAndReceive(fd *os.File) ([]byte, error) {
-	// generate the ADU from the RTU frame
-	adu := frame.GenerateRTUFrame()
-	if frame.DebugTrace {
-		log.Println(fmt.Sprintf("Tx: %x", adu))
-	}
-
-	// transmit the ADU to the slave device via the
-	// serial port represented by the fd pointer
-	_, err := fd.Write(adu)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	// allow the slave device adequate time to respond
-	time.Sleep(300 * time.Millisecond)
-
-	// then attempt to read the reply
-	response := make([]byte, TCP_FRAME_MAXSIZE)
-	_, err = fd.Read(response)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	// check the validity of the response
-	if response[0] != frame.SlaveAddress || response[1] != frame.FunctionCode {
-		if response[0] == frame.SlaveAddress && (response[1]&0x7f) == frame.FunctionCode {
-			switch response[2] {
-			case EXCEPTION_ILLEGAL_FUNCTION:
-				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
-			case EXCEPTION_DATA_ADDRESS:
-				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_ADDRESS]
-			case EXCEPTION_DATA_VALUE:
-				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_VALUE]
-			case EXCEPTION_SLAVE_DEVICE_FAILURE:
-				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_SLAVE_DEVICE_FAILURE]
-			}
-		}
-		return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
-	}
-
-	// confirm the checksum (crc)
-	response_length := response[2]
-	response_crc := crc(response[:3+response_length])
-	if response[(3+response_length)] != byte((response_crc&0xff)) ||
-		response[(3+response_length+1)] != byte((response_crc>>8)) {
-		// crc failed (odd that there's no specific code for it)
-		return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
-	}
-	return response[3:(response_length + 3)], nil
-}
-
 // viaRTU is a private method which applies the given function validator,
 // to make sure the functionCode passed is valid for the operation
 // desired. If correct, it creates an RTUFrame given the corresponding
-// information, attempts to open the serialDevice, and if successful, calls
-// TransmitAndReceive, returning the result. Otherwise, it returns an illegal
-// function error, or the I/O device access error, whichever it encountered.
+// information, attempts to open the serialDevice, and if successful, transmits
+// it to the modbus server (slave device) specified by the given (serial port),
+// and returns a byte array of the slave device's reply, and error (if any)
 func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, debug bool) ([]byte, error) {
 	if fnValidator(functionCode) {
 		frame := new(RTUFrame)
@@ -138,14 +81,40 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 		}
 
 		// make sure we can access the serial device
-		fd, err := os.OpenFile(serialDevice, os.O_RDWR|syscall.O_NOCTTY|syscall.O_NDELAY, 0666)
+		c := &serial.Config{Name: serialDevice, Baud: 9600}
+		s, err := serial.OpenPort(c)
 		if err != nil {
+			log.Println(fmt.Sprintf("Open Err: %s", err))
 			return []byte{}, err
 		} else {
-			defer fd.Close()
-			result, err := frame.TransmitAndReceive(fd)
-			return result, err
+			// generate the ADU from the RTU frame
+			adu := frame.GenerateRTUFrame()
+			if frame.DebugTrace {
+				log.Println(fmt.Sprintf("Tx: %x", adu))
+			}
+
+			// transmit the ADU to the slave device via the
+			// serial port represented by the fd pointer
+			_, werr := s.Write(adu)
+			if werr != nil {
+				log.Println(fmt.Sprintf("Write Err: %s", werr))
+				return []byte{}, werr
+			}
+
+			// allow the slave device adequate time to respond
+			time.Sleep(300 * time.Millisecond)
+
+			// then attempt to read the reply
+			response := make([]byte, TCP_FRAME_MAXSIZE)
+			n, rerr := s.Read(response)
+			if rerr != nil {
+				log.Println(fmt.Sprintf("Read Err: %s", rerr))
+				return []byte{}, rerr
+			}
+			// return only the number of bytes read
+			return response[:n], nil
 		}
+
 	}
 	return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
 }

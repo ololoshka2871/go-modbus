@@ -41,7 +41,7 @@ func main() {
 		if readErr != nil {
 			log.Println(readErr)
 		}
-		log.Println(readResult)
+		log.Println(fmt.Sprintf("Rx: %x", readResult))
 
 	} else {
 

@@ -68,10 +68,10 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 // information, attempts to open the serialDevice, and if successful, transmits
 // it to the modbus server (slave device) specified by the given (serial port),
 // and returns a byte array of the slave device's reply, and error (if any)
-func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, debug bool) ([]byte, error) {
+func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, baudRate, timeOut int, debug bool) ([]byte, error) {
 	if fnValidator(functionCode) {
 		frame := new(RTUFrame)
-		frame.DebugTrace = debug
+		frame.TimeoutInMilliseconds = timeOut
 		frame.SlaveAddress = slaveAddress
 		frame.FunctionCode = functionCode
 		frame.StartRegister = startRegister
@@ -81,15 +81,17 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 		}
 
 		// make sure we can access the serial device
-		c := &serial.Config{Name: serialDevice, Baud: 9600}
+		c := &serial.Config{Name: serialDevice, Baud: baudRate}
 		s, err := serial.OpenPort(c)
 		if err != nil {
-			log.Println(fmt.Sprintf("Open Err: %s", err))
+			if debug {
+				log.Println(fmt.Sprintf("RTU Open Err: %s", err))
+			}
 			return []byte{}, err
 		} else {
 			// generate the ADU from the RTU frame
 			adu := frame.GenerateRTUFrame()
-			if frame.DebugTrace {
+			if debug {
 				log.Println(fmt.Sprintf("Tx: %x", adu))
 			}
 
@@ -97,20 +99,57 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 			// serial port represented by the fd pointer
 			_, werr := s.Write(adu)
 			if werr != nil {
-				log.Println(fmt.Sprintf("Write Err: %s", werr))
+				if debug {
+					log.Println(fmt.Sprintf("RTU Write Err: %s", werr))
+				}
 				return []byte{}, werr
 			}
 
 			// allow the slave device adequate time to respond
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(time.Duration(frame.TimeoutInMilliseconds) * time.Millisecond)
 
 			// then attempt to read the reply
-			response := make([]byte, TCP_FRAME_MAXSIZE)
+			response := make([]byte, RTU_FRAME_MAXSIZE)
 			n, rerr := s.Read(response)
 			if rerr != nil {
-				log.Println(fmt.Sprintf("Read Err: %s", rerr))
+				if debug {
+					log.Println(fmt.Sprintf("RTU Read Err: %s", rerr))
+				}
 				return []byte{}, rerr
 			}
+
+			// check the validity of the response
+			if response[0] != frame.SlaveAddress || response[1] != frame.FunctionCode {
+				if debug {
+					log.Println("RTU Response Invalid")
+				}
+				if response[0] == frame.SlaveAddress && (response[1]&0x7f) == frame.FunctionCode {
+					switch response[2] {
+					case EXCEPTION_ILLEGAL_FUNCTION:
+						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
+					case EXCEPTION_DATA_ADDRESS:
+						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_ADDRESS]
+					case EXCEPTION_DATA_VALUE:
+						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_VALUE]
+					case EXCEPTION_SLAVE_DEVICE_FAILURE:
+						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_SLAVE_DEVICE_FAILURE]
+					}
+				}
+				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
+			}
+
+			// confirm the checksum (crc)
+			response_length := response[2]
+			response_crc := crc(response[:3+response_length])
+			if response[(3+response_length)] != byte((response_crc&0xff)) ||
+				response[(3+response_length+1)] != byte((response_crc>>8)) {
+				// crc failed (odd that there's no specific code for it)
+				if debug {
+					log.Println("RTU Response Invalid: Bad Checksum")
+				}
+				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
+			}
+
 			// return only the number of bytes read
 			return response[:n], nil
 		}
@@ -121,12 +160,12 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 
 // RTURead performs the given modbus Read function over RTU to the given
 // serialDevice, using the given frame data
-func RTURead(serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, debug bool) ([]byte, error) {
-	return viaRTU(ValidReadFunction, serialDevice, slaveAddress, functionCode, startRegister, numRegisters, []byte{}, debug)
+func RTURead(serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, baudRate, timeOut int, debug bool) ([]byte, error) {
+	return viaRTU(ValidReadFunction, serialDevice, slaveAddress, functionCode, startRegister, numRegisters, []byte{}, baudRate, timeOut, debug)
 }
 
 // RTUWrite performs the given modbus Write function over RTU to the given
 // serialDevice, using the given frame data
-func RTUWrite(serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, debug bool) ([]byte, error) {
-	return viaRTU(ValidWriteFunction, serialDevice, slaveAddress, functionCode, startRegister, numRegisters, data, debug)
+func RTUWrite(serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, baudRate, timeOut int, debug bool) ([]byte, error) {
+	return viaRTU(ValidWriteFunction, serialDevice, slaveAddress, functionCode, startRegister, numRegisters, data, baudRate, timeOut, debug)
 }

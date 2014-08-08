@@ -78,10 +78,10 @@ type TCPFrame struct {
 }
 
 type RTUFrame struct {
-	DebugTrace        bool
-	SlaveAddress      byte
-	FunctionCode      byte
-	StartRegister     uint16
-	NumberOfRegisters uint16
-	Data              []byte
+	TimeoutInMilliseconds int
+	SlaveAddress          byte
+	FunctionCode          byte
+	StartRegister         uint16
+	NumberOfRegisters     uint16
+	Data                  []byte
 }

@@ -70,5 +70,6 @@ $ sudo dmesg | tail
 ## Acknowledgements
 - [Lubia Yang](http://www.lubia.me) for the [original modbus code](https://github.com/lubia/modbus) in Go
 - [l.lefebvre](http://source.perl.free.fr/) for his excellent [modbus client](https://github.com/sourceperl/MBclient) and [server (slave device simulator)](https://github.com/sourceperl/mbserverd) code repositories
+- [Tarmigan Casebolt](https://github.com/tarm/) for his [goserial](https://github.com/tarm/goserial) library, which resolved connection issues in RTU mode
 - [modbusdriver.com](http://www.modbusdriver.com/) for their free [Diagslave Modbus Slave Simulator](http://www.modbusdriver.com/diagslave.html) tool
 - [Mohammad Hafiz (mypapit)](https://plus.google.com/113437861006502895279?rel=author) for his well-written [How to enable USB-Serial Port adapter (RS-232) in Ubuntu Linux](http://blog.mypapit.net/2008/05/how-to-use-usb-serial-port-converter-in-ubuntu.html) blog post

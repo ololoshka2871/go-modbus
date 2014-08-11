@@ -139,10 +139,9 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 			}
 
 			// confirm the checksum (crc)
-			response_length := response[2]
-			response_crc := crc(response[:3+response_length])
-			if response[(3+response_length)] != byte((response_crc&0xff)) ||
-				response[(3+response_length+1)] != byte((response_crc>>8)) {
+			response_crc := crc(response[:(n - 2)])
+			if response[(n-2)] != byte((response_crc&0xff)) ||
+				response[(n-1)] != byte((response_crc>>8)) {
 				// crc failed (odd that there's no specific code for it)
 				if debug {
 					log.Println("RTU Response Invalid: Bad Checksum")

@@ -4,7 +4,11 @@
 
 package modbusclient
 
-import "errors"
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+)
 
 const (
 	MODBUS_PORT       = 502
@@ -73,6 +77,17 @@ func HiLo(i uint16) (hi, lo byte) {
 	lo = byte(i & 0xff) //             Low Byte
 
 	return hi, lo
+}
+
+// DecodeHiLo attempts to convert a byte array of High/Low Byte values into
+// a 16-bit integer, and returns the result, also with an error, which will
+// be non-nil if the decoding failed.
+func DecodeHiLo(data []byte) (int16, error) {
+	var i int16
+	buf := bytes.NewReader(data)
+	err := binary.Read(buf, binary.BigEndian, &i)
+
+	return i, err
 }
 
 type TCPFrame struct {

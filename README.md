@@ -16,7 +16,7 @@ Install the package in your environment with these commands (the RTU code now de
 
 ```sh
 go get github.com/tarm/goserial
-go get github.com/dpapathanasiou/go-mobdbus
+go get github.com/dpapathanasiou/go-modbus
 ```
 
 Next, build and run the examples:

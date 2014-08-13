@@ -83,6 +83,7 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 		// make sure we can access the serial device
 		c := &serial.Config{Name: serialDevice, Baud: baudRate}
 		s, err := serial.OpenPort(c)
+		defer s.Close()
 		if err != nil {
 			if debug {
 				log.Println(fmt.Sprintf("RTU Open Err: %s", err))

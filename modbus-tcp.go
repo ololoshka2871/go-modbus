@@ -17,14 +17,12 @@ import (
 func (frame *TCPFrame) GenerateTCPFrame() []byte {
 	packetLen := len(frame.Data) + 8 // 7 bytes for the header + 1 for the function code
 	packet := make([]byte, packetLen)
-	idHi, idLo := HiLo(uint16(frame.TransactionID))
-	packet[0] = idHi // Transaction ID (High Byte)
-	packet[1] = idLo //                (Low Byte)
-	packet[2] = 0x00 // Protocol ID (2 bytes) -- always 00
+	packet[0] = byte(frame.TransactionID >> 8)   // Transaction ID (High Byte)
+	packet[1] = byte(frame.TransactionID & 0xff) //                (Low Byte)
+	packet[2] = 0x00                             // Protocol ID (2 bytes) -- always 00
 	packet[3] = 0x00
-	pLenHi, pLenLo := HiLo(uint16(packetLen - 6))
-	packet[4] = pLenHi // Remaining length of packet, beyond this point (High Byte)
-	packet[5] = pLenLo //                                               (Low Byte)
+	packet[4] = byte((packetLen - 6) >> 8)   // Remaining length of packet, beyond this point (High Byte)
+	packet[5] = byte((packetLen - 6) & 0xff) //                                               (Low Byte)
 
 	/* Unit ID (1 byte):
 	   If the slave device is using an Ethernet-to-serial bridge, set this to the

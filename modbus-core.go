@@ -71,14 +71,6 @@ func ValidWriteFunction(fnCode byte) bool {
 	return (fnCode >= FUNCTION_WRITE_SINGLE_COIL && fnCode <= FUNCTION_WRITE_MULTIPLE_REGISTERS)
 }
 
-// HiLo returns two bytes: the High Byte and Low Byte of the given integer
-func HiLo(i uint16) (hi, lo byte) {
-	hi = byte(i >> 8)   // compute the High Byte
-	lo = byte(i & 0xff) //             Low Byte
-
-	return hi, lo
-}
-
 // DecodeHiLo attempts to convert a byte array of High/Low Byte values into
 // a 16-bit integer, and returns the result, also with an error, which will
 // be non-nil if the decoding failed.

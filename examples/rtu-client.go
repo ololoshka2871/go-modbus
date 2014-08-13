@@ -49,17 +49,6 @@ func main() {
 		}
 		log.Println(fmt.Sprintf("Rx: %x", readResult))
 
-		// an example of processing the result message:
-
-		// Skip past the reply headers, and take a slice of the first data pair returned,
-		// to decode their high/low bytes into the corresponding integer value
-		firstInt, decodeErr := modbusclient.DecodeHiLo(readResult[2:4])
-		if decodeErr != nil {
-			log.Println(decodeErr)
-		} else {
-			log.Println(fmt.Sprintf("Decoded int = %d (from 1st pair of bytes: %x)", firstInt, readResult[2:4]))
-		}
-
 	} else {
 
 		// display the command line usage requirements

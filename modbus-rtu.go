@@ -42,12 +42,10 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 	packet := make([]byte, packetLen)
 	packet[0] = frame.SlaveAddress
 	packet[1] = frame.FunctionCode
-	startHi, startLo := HiLo(frame.StartRegister)
-	packet[2] = startHi // StartRegister (High Byte)
-	packet[3] = startLo //               (Low Byte)
-	numHi, numLo := HiLo(frame.NumberOfRegisters)
-	packet[4] = numHi // NumberOfRegisters (High Byte)
-	packet[5] = numLo // NumberOfRegisters (Low Byte)
+	packet[2] = byte(frame.StartRegister >> 8)       // (High Byte)
+	packet[3] = byte(frame.StartRegister & 0xff)     // (Low Byte)
+	packet[4] = byte(frame.NumberOfRegisters >> 8)   // (High Byte)
+	packet[5] = byte(frame.NumberOfRegisters & 0xff) // (Low Byte)
 	bytesUsed := 6
 
 	for i := 0; i < len(frame.Data); i++ {
@@ -57,9 +55,8 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 
 	// add the crc to the end
 	packet_crc := crc(packet[:bytesUsed])
-	crcHi, crcLo := HiLo(packet_crc)
-	packet[bytesUsed] = crcHi       // CRC (High Byte)
-	packet[(bytesUsed + 1)] = crcLo //     (Low Byte)
+	packet[bytesUsed] = byte(packet_crc & 0xff)
+	packet[(bytesUsed + 1)] = byte(packet_crc >> 8)
 	bytesUsed += 2
 
 	return packet[:bytesUsed]
@@ -143,8 +140,8 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 
 			// confirm the checksum (crc)
 			response_crc := crc(response[:(n - 2)])
-			replyCrcHi, replyCrcLo := HiLo(response_crc)
-			if response[(n-1)] != replyCrcHi || response[(n-2)] != replyCrcLo {
+			if response[(n-2)] != byte((response_crc&0xff)) ||
+				response[(n-1)] != byte((response_crc>>8)) {
 				// crc failed (odd that there's no specific code for it)
 				if debug {
 					log.Println("RTU Response Invalid: Bad Checksum")

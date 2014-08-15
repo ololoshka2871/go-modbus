@@ -39,33 +39,43 @@ func (frame *TCPFrame) GenerateTCPFrame() []byte {
 	return packet
 }
 
-// TransmitAndReceive is a method corresponding to a TCPFrame object which
-// generates the corresponding ADU, transmits it to the modbus server
-// (slave device) specified by the TCP address+port, and returns a byte array
-// of the slave device's reply, and error (if any)
-func (frame *TCPFrame) TransmitAndReceive(server string, port int) ([]byte, error) {
-	adu := frame.GenerateTCPFrame() // generate the ADU
-	if frame.DebugTrace {
-		log.Println(fmt.Sprintf("Tx: %x", adu))
-	}
-
+// ConnectTCP attempts to make a tcp connection to the given server/port
+// and returns the connection object (or nil, if fail) and an error
+// (which will be nil on success)
+func ConnectTCP(server string, port int) (net.Conn, error) {
 	// make sure the server:port combination resolves to a valid TCP address
 	addr, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", server, port))
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
 	// attempt to connect to the slave device (server)
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+func DisconnectTCP(conn net.Conn) {
+	conn.Close()
+}
+
+// TransmitAndReceive is a method corresponding to a TCPFrame object which
+// generates the corresponding ADU, transmits it to the modbus server
+// (slave device) specified by the TCP address+port, and returns a byte array
+// of the slave device's reply, and error (if any)
+func (frame *TCPFrame) TransmitAndReceive(conn net.Conn) ([]byte, error) {
+	adu := frame.GenerateTCPFrame() // generate the ADU
+	if frame.DebugTrace {
+		log.Println(fmt.Sprintf("Tx: %x", adu))
 	}
 
 	conn.SetDeadline(time.Now().Add(time.Duration(frame.TimeoutInMilliseconds) * time.Millisecond))
-	defer conn.Close()
 
 	// transmit the ADU
-	_, err = conn.Write(adu)
+	_, err := conn.Write(adu)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -86,7 +96,7 @@ func (frame *TCPFrame) TransmitAndReceive(server string, port int) ([]byte, erro
 // correct, it creates a TCPFrame given the corresponding information,
 // calls TransmitAndReceive, returning the result. Otherwise, it returns
 // an illegal function error.
-func viaTCP(fnValidator func(byte) bool, h string, p, timeOut, transactionID int, functionCode byte, serialBridge bool, slaveAddress byte, data []byte, debug bool) ([]byte, error) {
+func viaTCP(conn net.Conn, fnValidator func(byte) bool, timeOut, transactionID int, functionCode byte, serialBridge bool, slaveAddress byte, data []byte, debug bool) ([]byte, error) {
 	if fnValidator(functionCode) {
 		frame := new(TCPFrame)
 		frame.TimeoutInMilliseconds = timeOut
@@ -96,7 +106,7 @@ func viaTCP(fnValidator func(byte) bool, h string, p, timeOut, transactionID int
 		frame.EthernetToSerialBridge = serialBridge
 		frame.SlaveAddress = slaveAddress
 		frame.Data = data
-		result, err := frame.TransmitAndReceive(h, p)
+		result, err := frame.TransmitAndReceive(conn)
 		return result, err
 	}
 	return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
@@ -104,12 +114,12 @@ func viaTCP(fnValidator func(byte) bool, h string, p, timeOut, transactionID int
 
 // TCPRead performs the given modbus Read function over TCP to the given
 // host/port combination, using the given frame data
-func TCPRead(h string, p, timeOut, transactionID int, functionCode byte, serialBridge bool, slaveAddress byte, data []byte, debug bool) ([]byte, error) {
-	return viaTCP(ValidReadFunction, h, p, timeOut, transactionID, functionCode, serialBridge, slaveAddress, data, debug)
+func TCPRead(conn net.Conn, timeOut, transactionID int, functionCode byte, serialBridge bool, slaveAddress byte, data []byte, debug bool) ([]byte, error) {
+	return viaTCP(conn, ValidReadFunction, timeOut, transactionID, functionCode, serialBridge, slaveAddress, data, debug)
 }
 
 // TCPWrite performs the given modbus Write function over TCP to the given
 // host/port combination, using the given frame data
-func TCPWrite(h string, p, timeOut, transactionID int, functionCode byte, serialBridge bool, slaveAddress byte, data []byte, debug bool) ([]byte, error) {
-	return viaTCP(ValidWriteFunction, h, p, timeOut, transactionID, functionCode, serialBridge, slaveAddress, data, debug)
+func TCPWrite(conn net.Conn, timeOut, transactionID int, functionCode byte, serialBridge bool, slaveAddress byte, data []byte, debug bool) ([]byte, error) {
+	return viaTCP(conn, ValidWriteFunction, timeOut, transactionID, functionCode, serialBridge, slaveAddress, data, debug)
 }

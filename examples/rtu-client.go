@@ -40,23 +40,58 @@ func main() {
 
 		// turn on the debug trace option, to see what is being transmitted
 		trace := true
-
-		// attempt to read the [startAddr] address register on
-		// slave device number [slaveDevice] via the [serialDevice]
-		readResult, readErr := modbusclient.RTURead(serialPort, byte(slaveDevice), modbusclient.FUNCTION_READ_HOLDING_REGISTERS, uint16(startAddr), uint16(numBytes), baudRate, responsePause, trace)
-		if readErr != nil {
-			log.Println(readErr)
-		}
-		log.Println(fmt.Sprintf("Rx: %x", readResult))
-
-		// Skip past the reply headers, and take a slice of the first data pair returned,
-		// to decode their high/low bytes into the corresponding integer value
-		firstInt, decodeErr := modbusclient.DecodeHiLo(readResult[3:5])
-		if decodeErr != nil {
-			log.Println(decodeErr)
+		ctx, cerr := modbusclient.ConnectRTU(serialPort, baudRate)
+		if cerr != nil {
+			log.Println(fmt.Sprintf("RTU Connection Err: %s", cerr))
 		} else {
-			log.Println(fmt.Sprintf("Decoded int = %d (from 1st pair of data bytes: %x)", firstInt, readResult[3:5]))
+			// attempt to read the [startAddr] address register on
+			// slave device number [slaveDevice] via the [serialDevice]
+			readResult, readErr := modbusclient.RTURead(ctx, byte(slaveDevice), modbusclient.FUNCTION_READ_HOLDING_REGISTERS, uint16(startAddr), uint16(numBytes), responsePause, trace)
+			if readErr != nil {
+				log.Println(readErr)
+			} else {
+				log.Println(fmt.Sprintf("Rx: %x", readResult))
+
+				// Skip past the reply headers, and decode each of the data hi/lo byte pairs into integers
+				var (
+					sliceStart, sliceStop int
+					data                  int16
+					decodeErr             error
+				)
+
+				for i := 0; i < int(readResult[2]); i++ {
+					// take the next two bytes, if available
+					sliceStart = 3 + i
+					sliceStop = 3 + i + 2
+
+					// decode them into integers
+					data, decodeErr = modbusclient.DecodeHiLo(readResult[sliceStart:sliceStop])
+					if decodeErr != nil {
+						log.Println(decodeErr)
+					} else {
+						log.Println(fmt.Sprintf("Decoded int = %d (from pair of data bytes: %x)", data, readResult[sliceStart:sliceStop]))
+					}
+				}
+			}
+			modbusclient.DisconnectRTU(ctx)
 		}
+		/*
+			// attempt to read the [startAddr] address register on
+			// slave device number [slaveDevice] via the [serialDevice]
+			readResult, readErr := modbusclient.RTURead(serialPort, byte(slaveDevice), modbusclient.FUNCTION_READ_HOLDING_REGISTERS, uint16(startAddr), uint16(numBytes), baudRate, responsePause, trace)
+			if readErr != nil {
+				log.Println(readErr)
+			}
+			log.Println(fmt.Sprintf("Rx: %x", readResult))
+
+			// Skip past the reply headers, and take a slice of the first data pair returned,
+			// to decode their high/low bytes into the corresponding integer value
+			firstInt, decodeErr := modbusclient.DecodeHiLo(readResult[3:5])
+			if decodeErr != nil {
+				log.Println(decodeErr)
+			} else {
+				log.Println(fmt.Sprintf("Decoded int = %d (from 1st pair of data bytes: %x)", firstInt, readResult[3:5]))
+			}*/
 
 	} else {
 

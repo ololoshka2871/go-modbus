@@ -8,6 +8,7 @@ package modbusclient
 import (
 	"fmt"
 	"github.com/tarm/goserial"
+	"io"
 	"log"
 	"time"
 )
@@ -62,13 +63,26 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 	return packet[:bytesUsed]
 }
 
+// ConnectRTU attempts to access the Serial Device for subsequent
+// RTU writes and response reads from the modbus slave device
+func ConnectRTU(serialDevice string, baudRate int) (io.ReadWriteCloser, error) {
+	conf := &serial.Config{Name: serialDevice, Baud: baudRate}
+	ctx, err := serial.OpenPort(conf)
+	return ctx, err
+}
+
+// DisconnectRTU closes the underlying Serial Device connection
+func DisconnectRTU(ctx io.ReadWriteCloser) {
+	ctx.Close()
+}
+
 // viaRTU is a private method which applies the given function validator,
 // to make sure the functionCode passed is valid for the operation
 // desired. If correct, it creates an RTUFrame given the corresponding
 // information, attempts to open the serialDevice, and if successful, transmits
-// it to the modbus server (slave device) specified by the given (serial port),
+// it to the modbus server (slave device) specified by the given serial connection,
 // and returns a byte array of the slave device's reply, and error (if any)
-func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, baudRate, timeOut int, debug bool) ([]byte, error) {
+func viaRTU(connection io.ReadWriteCloser, fnValidator func(byte) bool, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
 	if fnValidator(functionCode) {
 		frame := new(RTUFrame)
 		frame.TimeoutInMilliseconds = timeOut
@@ -80,92 +94,81 @@ func viaRTU(fnValidator func(byte) bool, serialDevice string, slaveAddress, func
 			frame.Data = data
 		}
 
-		// make sure we can access the serial device
-		c := &serial.Config{Name: serialDevice, Baud: baudRate}
-		s, err := serial.OpenPort(c)
-		defer s.Close()
-		if err != nil {
-			if debug {
-				log.Println(fmt.Sprintf("RTU Open Err: %s", err))
-			}
-			return []byte{}, err
-		} else {
-			// generate the ADU from the RTU frame
-			adu := frame.GenerateRTUFrame()
-			if debug {
-				log.Println(fmt.Sprintf("Tx: %x", adu))
-			}
-
-			// transmit the ADU to the slave device via the
-			// serial port represented by the fd pointer
-			_, werr := s.Write(adu)
-			if werr != nil {
-				if debug {
-					log.Println(fmt.Sprintf("RTU Write Err: %s", werr))
-				}
-				return []byte{}, werr
-			}
-
-			// allow the slave device adequate time to respond
-			time.Sleep(time.Duration(frame.TimeoutInMilliseconds) * time.Millisecond)
-
-			// then attempt to read the reply
-			response := make([]byte, RTU_FRAME_MAXSIZE)
-			n, rerr := s.Read(response)
-			if rerr != nil {
-				if debug {
-					log.Println(fmt.Sprintf("RTU Read Err: %s", rerr))
-				}
-				return []byte{}, rerr
-			}
-
-			// check the validity of the response
-			if response[0] != frame.SlaveAddress || response[1] != frame.FunctionCode {
-				if debug {
-					log.Println("RTU Response Invalid")
-				}
-				if response[0] == frame.SlaveAddress && (response[1]&0x7f) == frame.FunctionCode {
-					switch response[2] {
-					case EXCEPTION_ILLEGAL_FUNCTION:
-						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
-					case EXCEPTION_DATA_ADDRESS:
-						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_ADDRESS]
-					case EXCEPTION_DATA_VALUE:
-						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_VALUE]
-					case EXCEPTION_SLAVE_DEVICE_FAILURE:
-						return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_SLAVE_DEVICE_FAILURE]
-					}
-				}
-				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
-			}
-
-			// confirm the checksum (crc)
-			response_crc := crc(response[:(n - 2)])
-			if response[(n-2)] != byte((response_crc&0xff)) ||
-				response[(n-1)] != byte((response_crc>>8)) {
-				// crc failed (odd that there's no specific code for it)
-				if debug {
-					log.Println("RTU Response Invalid: Bad Checksum")
-				}
-				return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
-			}
-
-			// return only the number of bytes read
-			return response[:n], nil
+		// generate the ADU from the RTU frame
+		adu := frame.GenerateRTUFrame()
+		if debug {
+			log.Println(fmt.Sprintf("Tx: %x", adu))
 		}
 
+		// transmit the ADU to the slave device via the
+		// serial port represented by the fd pointer
+		_, werr := connection.Write(adu)
+		if werr != nil {
+			if debug {
+				log.Println(fmt.Sprintf("RTU Write Err: %s", werr))
+			}
+			return []byte{}, werr
+		}
+
+		// allow the slave device adequate time to respond
+		time.Sleep(time.Duration(frame.TimeoutInMilliseconds) * time.Millisecond)
+
+		// then attempt to read the reply
+		response := make([]byte, RTU_FRAME_MAXSIZE)
+		n, rerr := connection.Read(response)
+		if rerr != nil {
+			if debug {
+				log.Println(fmt.Sprintf("RTU Read Err: %s", rerr))
+			}
+			return []byte{}, rerr
+		}
+
+		// check the validity of the response
+		if response[0] != frame.SlaveAddress || response[1] != frame.FunctionCode {
+			if debug {
+				log.Println("RTU Response Invalid")
+			}
+			if response[0] == frame.SlaveAddress && (response[1]&0x7f) == frame.FunctionCode {
+				switch response[2] {
+				case EXCEPTION_ILLEGAL_FUNCTION:
+					return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
+				case EXCEPTION_DATA_ADDRESS:
+					return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_ADDRESS]
+				case EXCEPTION_DATA_VALUE:
+					return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_DATA_VALUE]
+				case EXCEPTION_SLAVE_DEVICE_FAILURE:
+					return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_SLAVE_DEVICE_FAILURE]
+				}
+			}
+			return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
+		}
+
+		// confirm the checksum (crc)
+		response_crc := crc(response[:(n - 2)])
+		if response[(n-2)] != byte((response_crc&0xff)) ||
+			response[(n-1)] != byte((response_crc>>8)) {
+			// crc failed (odd that there's no specific code for it)
+			if debug {
+				log.Println("RTU Response Invalid: Bad Checksum")
+			}
+			return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
+		}
+
+		// return only the number of bytes read
+		return response[:n], nil
 	}
+
 	return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_ILLEGAL_FUNCTION]
 }
 
 // RTURead performs the given modbus Read function over RTU to the given
 // serialDevice, using the given frame data
-func RTURead(serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, baudRate, timeOut int, debug bool) ([]byte, error) {
-	return viaRTU(ValidReadFunction, serialDevice, slaveAddress, functionCode, startRegister, numRegisters, []byte{}, baudRate, timeOut, debug)
+func RTURead(serialDeviceConnection io.ReadWriteCloser, slaveAddress, functionCode byte, startRegister, numRegisters uint16, timeOut int, debug bool) ([]byte, error) {
+	return viaRTU(serialDeviceConnection, ValidReadFunction, slaveAddress, functionCode, startRegister, numRegisters, []byte{}, timeOut, debug)
 }
 
 // RTUWrite performs the given modbus Write function over RTU to the given
 // serialDevice, using the given frame data
-func RTUWrite(serialDevice string, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, baudRate, timeOut int, debug bool) ([]byte, error) {
-	return viaRTU(ValidWriteFunction, serialDevice, slaveAddress, functionCode, startRegister, numRegisters, data, baudRate, timeOut, debug)
+func RTUWrite(serialDeviceConnection io.ReadWriteCloser, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
+	return viaRTU(serialDeviceConnection, ValidWriteFunction, slaveAddress, functionCode, startRegister, numRegisters, data, timeOut, debug)
 }

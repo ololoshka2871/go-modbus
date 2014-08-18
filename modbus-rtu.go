@@ -151,7 +151,8 @@ func viaRTU(connection io.ReadWriteCloser, fnValidator func(byte) bool, slaveAdd
 			if debug {
 				log.Println("RTU Response Invalid: Bad Checksum")
 			}
-			return []byte{}, MODBUS_EXCEPTIONS[EXCEPTION_UNSPECIFIED]
+			// return the response bytes anyway, and let the caller decide
+			return response[:n], MODBUS_EXCEPTIONS[EXCEPTION_BAD_CHECKSUM]
 		}
 
 		// return only the number of bytes read

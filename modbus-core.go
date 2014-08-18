@@ -35,6 +35,7 @@ const (
 	EXCEPTION_MEMORY_PARITY_ERROR                     = 0x08
 	EXCEPTION_GATEWAY_PATH_UNAVAILABLE                = 0x0A
 	EXCEPTION_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND = 0x0B
+	EXCEPTION_BAD_CHECKSUM                            = 0xff // this is not official
 )
 
 var MODBUS_EXCEPTIONS = map[uint16]error{
@@ -48,6 +49,7 @@ var MODBUS_EXCEPTIONS = map[uint16]error{
 	EXCEPTION_MEMORY_PARITY_ERROR:                     errors.New("Modbus Error: Memory Parity Error (0x08)"),
 	EXCEPTION_GATEWAY_PATH_UNAVAILABLE:                errors.New("Modbus Error: Gateway Path Unavailable (0x0A)"),
 	EXCEPTION_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND: errors.New("Modbus Error: Gateway Target Device Failed to Respond (0x0B)"),
+	EXCEPTION_BAD_CHECKSUM:                            errors.New("Modbus Error: Bad Checksum"),
 }
 
 // ValidFunction returns a boolean, depending on whether or not the

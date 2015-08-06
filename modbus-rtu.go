@@ -94,14 +94,14 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 
 // ConnectRTU attempts to access the Serial Device for subsequent
 // RTU writes and response reads from the modbus slave device
-func ConnectRTU(serialDevice string, baudRate int) (serial.Port, error) {
-	conf := &serial.Config{Name: serialDevice, Baud: baudRate}
+func ConnectRTU(serialDevice string, baudRate int) (*serial.Port, error) {
+	conf := &serial.Config{Name: serialDevice, Baud: baudRate, ReadTimeout: 100*time.Millisecond}
 	ctx, err := serial.OpenPort(conf)
-	return *ctx, err
+	return ctx, err
 }
 
 // DisconnectRTU closes the underlying Serial Device connection
-func DisconnectRTU(ctx serial.Port) {
+func DisconnectRTU(ctx *serial.Port) {
 	ctx.Close()
 }
 
@@ -111,7 +111,7 @@ func DisconnectRTU(ctx serial.Port) {
 // information, attempts to open the serialDevice, and if successful, transmits
 // it to the modbus server (slave device) specified by the given serial connection,
 // and returns a byte array of the slave device's reply, and error (if any)
-func viaRTU(connection serial.Port, fnValidator func(byte) bool, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
+func viaRTU(connection *serial.Port, fnValidator func(byte) bool, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
 	if fnValidator(functionCode) {
 		frame := new(RTUFrame)
 		frame.TimeoutInMilliseconds = timeOut
@@ -132,7 +132,7 @@ func viaRTU(connection serial.Port, fnValidator func(byte) bool, slaveAddress, f
 		// transmit the ADU to the slave device via the
 		// serial port represented by the fd pointer
 		if rtscontroller != nil {
-			rtscontroller(&connection, true)
+			rtscontroller(connection, true)
 		}
 		_, werr := connection.Write(adu)
 		if werr != nil {
@@ -142,7 +142,7 @@ func viaRTU(connection serial.Port, fnValidator func(byte) bool, slaveAddress, f
 			return []byte{}, werr
 		}
 		if rtscontroller != nil {
-			rtscontroller(&connection, false)
+			rtscontroller(connection, false)
 		}
 
 		// allow the slave device adequate time to respond
@@ -199,12 +199,12 @@ func viaRTU(connection serial.Port, fnValidator func(byte) bool, slaveAddress, f
 
 // RTURead performs the given modbus Read function over RTU to the given
 // serialDevice, using the given frame data
-func RTURead(serialDeviceConnection serial.Port, slaveAddress, functionCode byte, startRegister, numRegisters uint16, timeOut int, debug bool) ([]byte, error) {
+func RTURead(serialDeviceConnection *serial.Port, slaveAddress, functionCode byte, startRegister, numRegisters uint16, timeOut int, debug bool) ([]byte, error) {
 	return viaRTU(serialDeviceConnection, ValidReadFunction, slaveAddress, functionCode, startRegister, numRegisters, []byte{}, timeOut, debug)
 }
 
 // RTUWrite performs the given modbus Write function over RTU to the given
 // serialDevice, using the given frame data
-func RTUWrite(serialDeviceConnection serial.Port, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
+func RTUWrite(serialDeviceConnection *serial.Port, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
 	return viaRTU(serialDeviceConnection, ValidWriteFunction, slaveAddress, functionCode, startRegister, numRegisters, data, timeOut, debug)
 }

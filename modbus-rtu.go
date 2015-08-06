@@ -35,7 +35,11 @@ func SetRtsPolicy(policy int) {
 }
 
 func rtsControllerHigh(ctx *serial.Port, setRts bool) {
-	
+	if setRts {
+		ctx.SetRtsOn()
+	} else {
+		ctx.SetRtsOff()
+	}
 }
 
 func rtsControllerLo(ctx *serial.Port, setRts bool) {
@@ -95,7 +99,7 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 // ConnectRTU attempts to access the Serial Device for subsequent
 // RTU writes and response reads from the modbus slave device
 func ConnectRTU(serialDevice string, baudRate int) (*serial.Port, error) {
-	conf := &serial.Config{Name: serialDevice, Baud: baudRate, ReadTimeout: 100*time.Millisecond}
+	conf := &serial.Config{Name: serialDevice, Baud: baudRate, ReadTimeout: 5*time.Millisecond}
 	ctx, err := serial.OpenPort(conf)
 	return ctx, err
 }

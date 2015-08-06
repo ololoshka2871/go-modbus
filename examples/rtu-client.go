@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/dpapathanasiou/go-modbus"
+	"github.com/ololoshka2871/go-modbus"
 	"log"
 )
 

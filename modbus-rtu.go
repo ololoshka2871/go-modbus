@@ -36,9 +36,9 @@ func SetRtsPolicy(policy int) {
 
 func rtsControllerHigh(ctx *serial.Port, setRts bool) {
 	if setRts {
-		ctx.SetRtsOn()
+		ctx.SetDtrOn()
 	} else {
-		ctx.SetRtsOff()
+		ctx.SetDtrOff()
 	}
 }
 

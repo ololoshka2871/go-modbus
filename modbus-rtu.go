@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+type SendHooker interface {
+	WriteHook(io.ReadWriteCloser, bool)
+}
+
+var SendHook SendHooker = nil
+
 // crc computes and returns a cyclic redundancy check of the given byte array
 func crc(data []byte) uint16 {
 	var crc16 uint16 = 0xffff
@@ -100,6 +106,10 @@ func viaRTU(connection io.ReadWriteCloser, fnValidator func(byte) bool, slaveAdd
 			log.Println(fmt.Sprintf("Tx: %x", adu))
 		}
 
+		if SendHook != nil {
+			SendHook.WriteHook(connection, true)
+		}
+
 		// transmit the ADU to the slave device via the
 		// serial port represented by the fd pointer
 		_, werr := connection.Write(adu)
@@ -108,6 +118,10 @@ func viaRTU(connection io.ReadWriteCloser, fnValidator func(byte) bool, slaveAdd
 				log.Println(fmt.Sprintf("RTU Write Err: %s", werr))
 			}
 			return []byte{}, werr
+		}
+		
+		if SendHook != nil {
+			SendHook.WriteHook(connection, false)
 		}
 
 		// allow the slave device adequate time to respond

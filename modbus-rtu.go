@@ -7,8 +7,8 @@ package modbusclient
 
 import (
 	"fmt"
-	"github.com/tarm/goserial"
-	"io"
+	"github.com/tarm/serial"
+	"io" 
 	"log"
 	"time"
 )
@@ -71,14 +71,14 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 
 // ConnectRTU attempts to access the Serial Device for subsequent
 // RTU writes and response reads from the modbus slave device
-func ConnectRTU(serialDevice string, baudRate int) (io.ReadWriteCloser, error) {
-	conf := &serial.Config{Name: serialDevice, Baud: baudRate}
+func ConnectRTU(serialDevice string, baudRate int) (*serial.Port, error) {
+	conf := &serial.Config{Name: serialDevice, Baud: baudRate, ReadTimeout: 5*time.Millisecond}
 	ctx, err := serial.OpenPort(conf)
 	return ctx, err
 }
 
 // DisconnectRTU closes the underlying Serial Device connection
-func DisconnectRTU(ctx io.ReadWriteCloser) {
+func DisconnectRTU(ctx *serial.Port) {
 	ctx.Close()
 }
 
@@ -88,7 +88,7 @@ func DisconnectRTU(ctx io.ReadWriteCloser) {
 // information, attempts to open the serialDevice, and if successful, transmits
 // it to the modbus server (slave device) specified by the given serial connection,
 // and returns a byte array of the slave device's reply, and error (if any)
-func viaRTU(connection io.ReadWriteCloser, fnValidator func(byte) bool, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
+func viaRTU(connection *serial.Port, fnValidator func(byte) bool, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
 	if fnValidator(functionCode) {
 		frame := new(RTUFrame)
 		frame.TimeoutInMilliseconds = timeOut
@@ -178,12 +178,12 @@ func viaRTU(connection io.ReadWriteCloser, fnValidator func(byte) bool, slaveAdd
 
 // RTURead performs the given modbus Read function over RTU to the given
 // serialDevice, using the given frame data
-func RTURead(serialDeviceConnection io.ReadWriteCloser, slaveAddress, functionCode byte, startRegister, numRegisters uint16, timeOut int, debug bool) ([]byte, error) {
+func RTURead(serialDeviceConnection *serial.Port, slaveAddress, functionCode byte, startRegister, numRegisters uint16, timeOut int, debug bool) ([]byte, error) {
 	return viaRTU(serialDeviceConnection, ValidReadFunction, slaveAddress, functionCode, startRegister, numRegisters, []byte{}, timeOut, debug)
 }
 
 // RTUWrite performs the given modbus Write function over RTU to the given
 // serialDevice, using the given frame data
-func RTUWrite(serialDeviceConnection io.ReadWriteCloser, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
+func RTUWrite(serialDeviceConnection *serial.Port, slaveAddress, functionCode byte, startRegister, numRegisters uint16, data []byte, timeOut int, debug bool) ([]byte, error) {
 	return viaRTU(serialDeviceConnection, ValidWriteFunction, slaveAddress, functionCode, startRegister, numRegisters, data, timeOut, debug)
 }

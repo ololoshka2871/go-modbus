@@ -89,7 +89,6 @@ func ConnectRTU(serialDevice string, baudRate int) (*serial.Port, error) {
 				close(rtsDownChan)
 				return
 			} else if SendHook != nil && val > 0 {
-				log.Print(val)
 				time.Sleep(onebyteTime * time.Duration(val))
 				SendHook.WriteHook(ctx, false) // transmition finished
 			}

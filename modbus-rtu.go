@@ -11,13 +11,19 @@ import (
 	"io" 
 	"log"
 	"time"
+	"math"
 )
 
 type SendHooker interface {
 	WriteHook(io.ReadWriteCloser, bool)
 }
 
+const (
+	cloasing = -1
+)
+
 var SendHook SendHooker = nil
+var rtsDownChan chan int
 
 // crc computes and returns a cyclic redundancy check of the given byte array
 func crc(data []byte) uint16 {
@@ -74,11 +80,28 @@ func (frame *RTUFrame) GenerateRTUFrame() []byte {
 func ConnectRTU(serialDevice string, baudRate int) (*serial.Port, error) {
 	conf := &serial.Config{Name: serialDevice, Baud: baudRate, ReadTimeout: 5*time.Millisecond}
 	ctx, err := serial.OpenPort(conf)
+	
+	rtsDownChan = make(chan int)
+	
+	go func(onebyteTime time.Duration) {
+		for val := range rtsDownChan {
+			if val == cloasing {
+				close(rtsDownChan)
+				return
+			} else if SendHook != nil && val > 0 {
+				time.Sleep(onebyteTime * time.Duration(val))
+				SendHook.WriteHook(ctx, false) // transmition finished
+			}
+		}
+	} (time.Duration(math.Ceil(float64(time.Nanosecond * (1 + 8 + 0 + 1)) / float64(baudRate))))
+	//(1000 * 1000) * (1 + data_bit + (parity == 'N' ? 0 : 1) + stop_bit) / baud; [us] (libmodbus)
+	
 	return ctx, err
 }
 
 // DisconnectRTU closes the underlying Serial Device connection
 func DisconnectRTU(ctx *serial.Port) {
+	rtsDownChan <- cloasing
 	ctx.Close()
 }
 
@@ -106,8 +129,9 @@ func viaRTU(connection *serial.Port, fnValidator func(byte) bool, slaveAddress, 
 			log.Println(fmt.Sprintf("Tx: %x", adu))
 		}
 
+		rtsDownChan <- len(adu)
 		if SendHook != nil {
-			SendHook.WriteHook(connection, true)
+			SendHook.WriteHook(connection, true)		
 		}
 
 		// transmit the ADU to the slave device via the
@@ -118,10 +142,6 @@ func viaRTU(connection *serial.Port, fnValidator func(byte) bool, slaveAddress, 
 				log.Println(fmt.Sprintf("RTU Write Err: %s", werr))
 			}
 			return []byte{}, werr
-		}
-		
-		if SendHook != nil {
-			SendHook.WriteHook(connection, false)
 		}
 
 		// allow the slave device adequate time to respond

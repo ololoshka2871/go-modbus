@@ -7,7 +7,7 @@ package modbusclient
 
 import (
 	"fmt"
-	"github.com/ololoshka2871/serial"
+	"github.com/tarm/serial"
 	"io" 
 	"log"
 	"time"
@@ -89,11 +89,12 @@ func ConnectRTU(serialDevice string, baudRate int) (*serial.Port, error) {
 				close(rtsDownChan)
 				return
 			} else if SendHook != nil && val > 0 {
+				log.Print(val)
 				time.Sleep(onebyteTime * time.Duration(val))
 				SendHook.WriteHook(ctx, false) // transmition finished
 			}
 		}
-	} (time.Duration(math.Ceil(float64(time.Nanosecond * (1 + 8 + 0 + 1)) / float64(baudRate))))
+	} (time.Duration(math.Ceil(float64(time.Second * (1 + 8 + 0 + 1)) / float64(baudRate))))
 	//(1000 * 1000) * (1 + data_bit + (parity == 'N' ? 0 : 1) + stop_bit) / baud; [us] (libmodbus)
 	
 	return ctx, err
